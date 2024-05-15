@@ -47,20 +47,31 @@ export async function addComputeAndPriority(tx: VersionedTransaction | Transacti
 }
 
 export async function sendAndConfirmTransactions(connection: Connection, transactions: (Transaction | VersionedTransaction)[], signer: Keypair | AnchorWallet | WalletContextState, blockhash: Blockhash): Promise<TransactionResult[]> {
+    const wallet = signer instanceof Keypair ? new Wallet(signer) : signer as WalletContextState | AnchorWallet;
 
-    const results: string[] = await Promise.all(transactions.map(async (tx) => {
-        const wallet = signer instanceof Keypair ? new Wallet(signer) : signer as WalletContextState | AnchorWallet;
-
+    const addTxInfo = transactions.map((tx) => {
         if (tx instanceof Transaction) {
             tx.recentBlockhash = blockhash;
             tx.feePayer = wallet.publicKey;
-            const signedTx = await wallet.signTransaction(tx);
-            const txid = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: true, preflightCommitment: 'confirmed' })
-            return txid;
+            return tx;
         } else {
             tx.message.recentBlockhash = blockhash;
-            const signedTx = await wallet.signTransaction(tx);
-            const txid = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: true, preflightCommitment: 'confirmed' })
+            return tx;
+        }
+
+    })
+
+    const signedTxs = await wallet.signAllTransactions(addTxInfo);
+    const results: string[] = await Promise.all(signedTxs.map(async (tx) => {
+
+
+        if (tx instanceof Transaction) {
+
+            const txid = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, preflightCommitment: 'confirmed' })
+            return txid;
+        } else {
+
+            const txid = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, preflightCommitment: 'confirmed' })
             return txid;
         }
     }))
